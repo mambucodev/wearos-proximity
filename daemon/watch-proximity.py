@@ -436,6 +436,40 @@ def query_watch_security_state() -> tuple[bool | None, bool | None]:
         return None, None
 
 
+def get_watch_battery(mac: str) -> int | None:
+    """Read watch battery percentage from BlueZ Battery1 D-Bus property."""
+    dev_path = "/org/bluez/hci0/dev_" + mac.replace(":", "_")
+    try:
+        res = subprocess.run(
+            [
+                "gdbus", "call", "--system", "--dest", "org.bluez",
+                "--object-path", dev_path,
+                "--method", "org.freedesktop.DBus.Properties.Get",
+                "org.bluez.Battery1", "Percentage"
+            ],
+            capture_output=True, text=True, timeout=1.0
+        )
+        if res.returncode == 0:
+            m = re.search(r"byte\s+(0x[0-9a-fA-F]+|\d+)", res.stdout)
+            if m:
+                val = m.group(1)
+                return int(val, 16) if val.startswith("0x") else int(val)
+    except Exception:
+        pass
+    return None
+
+
+def send_watch_event(event: str):
+    """Send proximity events (LOCK, UNLOCK, ALARM, ALARM_STOP) to watch companion APK."""
+    try:
+        subprocess.run(
+            ["adb", "shell", "am", "broadcast", "-a", f"dev.mambuco.watchproximity.ACTION_{event}"],
+            capture_output=True, timeout=1.0
+        )
+    except Exception as e:
+        logger.debug("Failed to dispatch watch event %s: %s", event, e)
+
+
 class AntiTheftAlarm:
     """Manages audible alarm siren and tamper detection when laptop is away and locked."""
     def __init__(self, sound_path: str):
@@ -464,6 +498,7 @@ class AntiTheftAlarm:
             return
         self.triggered = True
         logger.warning("TRIGGERING AUDIBLE ANTI-THEFT SIREN!")
+        send_watch_event("ALARM")
 
         try:
             subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], capture_output=True, timeout=1)
@@ -487,6 +522,7 @@ class AntiTheftAlarm:
     def disarm(self):
         if self.triggered:
             logger.info("Anti-Theft alarm disarmed. Silencing siren.")
+            send_watch_event("ALARM_STOP")
         self.triggered = False
         self.armed = False
         if self._siren_proc:
@@ -561,12 +597,19 @@ def run_daemon(config: dict):
     warned_step_away = False
     paused_players: list[str] = []
     anti_theft = AntiTheftAlarm(config["ALARM_SOUND_PATH"])
+    prev_locked = is_screen_locked()
 
     while True:
         config = read_runtime_controls(config)
         snooze_left = check_snooze()
 
         locked = is_screen_locked()
+        if locked and not prev_locked:
+            send_watch_event("LOCK")
+        elif not locked and prev_locked:
+            send_watch_event("UNLOCK")
+        prev_locked = locked
+
         ac_online = is_ac_online()
 
         # Handle Snooze mode

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Watch Proximity</string>
+    <string name="service_running">Proximity Service Running</string>
+    <string name="service_description">Providing telemetry and lock alerts to your laptop</string>
+    <string name="channel_service">Proximity Background Service</string>
+    <string name="channel_alerts">Laptop Proximity Alerts</string>
+</resources>

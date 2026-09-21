@@ -16,3 +16,11 @@ env/
 *.tmp
 *.log
 .DS_Store
+
+# Android & Gradle
+.gradle/
+build/
+*/build/
+local.properties
+*.apk
+*.aab
