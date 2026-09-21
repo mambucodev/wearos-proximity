@@ -26,7 +26,7 @@ in
 
     security.pam.services.sudo = {
       rules.auth.watch-proximity = {
-        order = 11930; # Positioned immediately before pam_fprintd (order 11940)
+        order = 11390; # Positioned immediately before pam_fprintd (order 11400)
         control = "[success=done default=ignore]";
         modulePath = "${pkgs.pam}/lib/security/pam_exec.so";
         args = [ "quiet" "${cfg.package}/bin/pam-watch-proximity" ];
