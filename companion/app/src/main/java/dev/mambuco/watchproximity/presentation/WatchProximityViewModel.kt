@@ -115,8 +115,14 @@ class WatchProximityViewModel {
     }
 
     fun toggleGuard(onComplete: (Boolean) -> Unit = {}) {
+        val newChecked = !state.guardEnabled
+        state = state.copy(guardEnabled = newChecked)
         postAction("/api/toggle-guard") { success ->
-            refreshStatus()
+            if (!success) {
+                state = state.copy(guardEnabled = !newChecked)
+            } else {
+                refreshStatus()
+            }
             onComplete(success)
         }
     }

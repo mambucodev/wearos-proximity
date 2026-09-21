@@ -124,14 +124,21 @@ def parse_config(config_path: Path) -> dict:
 def read_runtime_controls(config: dict) -> dict:
     """Check for dynamic overrides from the GNOME extension via CONTROL_FILE."""
     if not CONTROL_FILE.exists():
+        config.setdefault("PAUSED", False)
         return config
     try:
         data = json.loads(CONTROL_FILE.read_text(encoding="utf-8"))
         for key in ("AUTO_WAKE", "ANTI_THEFT", "PAUSE_MEDIA", "RESUME_MEDIA"):
             if key in data:
                 config[key] = bool(data[key])
+        if "paused" in data:
+            config["PAUSED"] = bool(data["paused"])
+        elif "PAUSED" in data:
+            config["PAUSED"] = bool(data["PAUSED"])
+        else:
+            config.setdefault("PAUSED", False)
     except Exception:
-        pass
+        config.setdefault("PAUSED", False)
     return config
 
 
@@ -612,12 +619,23 @@ class ProximityApiHandler(http.server.BaseHTTPRequestHandler):
                     ctrl = json.loads(CONTROL_FILE.read_text(encoding="utf-8"))
                 except Exception:
                     pass
-            new_paused = not ctrl.get("paused", False)
+            new_paused = not ctrl.get("paused", ctrl.get("PAUSED", False))
             ctrl["paused"] = new_paused
+            ctrl["PAUSED"] = new_paused
             CONTROL_FILE.write_text(json.dumps(ctrl), encoding="utf-8")
             status_msg = "Paused" if new_paused else "Active"
             logger.info("HTTP API: Proximity Guard toggled from watch -> %s", status_msg)
             send_notification("Proximity Guard", f"Proximity lock is now {status_msg}")
+            # Update status.json immediately so polls see the new state with 0 latency
+            try:
+                if STATUS_FILE.exists():
+                    cur_st = json.loads(STATUS_FILE.read_text(encoding="utf-8"))
+                    cur_st["proximity_enabled"] = not new_paused
+                    if new_paused:
+                        cur_st["state"] = "PAUSED"
+                    STATUS_FILE.write_text(json.dumps(cur_st), encoding="utf-8")
+            except Exception:
+                pass
             self.send_json(200, {"success": True, "proximity_enabled": not new_paused})
         elif url.path == "/api/ring":
             logger.info("HTTP API: Ring My Laptop requested from watch!")
@@ -753,6 +771,33 @@ def run_daemon(config: dict):
                 "alarm_active": False,
                 "auto_wake": config["AUTO_WAKE"],
                 "snooze_remaining": snooze_left,
+                "watch_unlocked": None,
+                "watch_on_body": None,
+                "updated_at": time.time(),
+            })
+            time.sleep(2.0)
+            continue
+
+        # Handle Paused mode (toggled from GNOME or Watch)
+        if config.get("PAUSED", False):
+            connected, rssi = get_bluetooth_rssi(mac)
+            dist_str = estimate_distance(rssi)
+            write_status({
+                "state": "PAUSED",
+                "rssi": rssi,
+                "distance_est": dist_str,
+                "device_name": device_name,
+                "device_mac": mac,
+                "connected": connected,
+                "strikes": 0,
+                "max_strikes": tolerance,
+                "is_locked": locked,
+                "proximity_enabled": False,
+                "ac_online": ac_online,
+                "anti_theft_armed": False,
+                "alarm_active": False,
+                "auto_wake": config["AUTO_WAKE"],
+                "snooze_remaining": 0,
                 "watch_unlocked": None,
                 "watch_on_body": None,
                 "updated_at": time.time(),

@@ -166,17 +166,33 @@ class ProximityToggle extends QuickSettings.QuickMenuToggle {
     }
 
     _syncState() {
-        const active = this._isServiceActive();
-        this.checked = active;
+        const serviceRunning = this._isServiceActive();
+        const status = this._readStatus();
+        const isPaused = status ? (status.proximity_enabled === false || status.state === 'PAUSED') : false;
 
-        if (!active) {
-            this.subtitle = 'Paused';
+        this.checked = serviceRunning && !isPaused;
+
+        if (!serviceRunning) {
+            this.subtitle = 'Stopped';
             this.iconName = 'system-lock-screen-symbolic';
-            this._meterItem.label.text = 'Signal: Service Paused';
+            this._meterItem.label.text = 'Signal: Service Stopped';
             this._distItem.label.text = 'Status: Inactive';
             this._watchSecurityItem.visible = false;
             if (this._indicatorRef)
                 this._indicatorRef.visible = false;
+            return;
+        }
+
+        if (isPaused) {
+            this.subtitle = 'Paused';
+            this.iconName = 'media-playback-pause-symbolic';
+            if (this._indicatorRef) {
+                this._indicatorRef.visible = true;
+                this._indicatorRef.icon_name = 'media-playback-pause-symbolic';
+            }
+            this._meterItem.label.text = 'Signal: Proximity Paused';
+            this._distItem.label.text = 'Status: Paused';
+            this._watchSecurityItem.visible = false;
             return;
         }
 
@@ -259,12 +275,12 @@ class ProximityToggle extends QuickSettings.QuickMenuToggle {
     }
 
     _onToggle() {
-        const svc = this._getActiveServiceName();
-        const targetCmd = this.checked
-            ? 'systemctl --user start ' + svc
-            : 'systemctl --user stop ' + svc;
-        GLib.spawn_command_line_async(targetCmd);
-        this.subtitle = this.checked ? 'Active' : 'Paused';
+        const status = this._readStatus();
+        const currentlyPaused = status ? (status.proximity_enabled === false || status.state === 'PAUSED') : false;
+        const newPaused = !currentlyPaused;
+        this._setControl('paused', newPaused);
+        this.checked = !newPaused;
+        this.subtitle = newPaused ? 'Paused' : 'Active';
     }
 
     destroy() {

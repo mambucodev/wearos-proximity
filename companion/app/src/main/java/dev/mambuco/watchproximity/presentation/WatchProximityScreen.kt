@@ -10,13 +10,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.*
-import dev.mambuco.watchproximity.presentation.theme.*
+import dev.mambuco.watchproximity.R
 
 @Composable
 fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchProximityViewModel() }) {
@@ -43,17 +44,15 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                 .background(Color.Black),
             state = listState,
             horizontalAlignment = Alignment.CenterHorizontally,
-            contentPadding = PaddingValues(top = 28.dp, start = 12.dp, end = 12.dp, bottom = 32.dp)
+            contentPadding = PaddingValues(top = 28.dp, start = 14.dp, end = 14.dp, bottom = 32.dp)
         ) {
             // Header
             item {
                 ListHeader {
                     Text(
-                        text = "FREETOP GUARD",
-                        color = CatppuccinSapphire,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        text = "LAPTOP PROXIMITY",
+                        style = MaterialTheme.typography.caption2,
+                        color = MaterialTheme.colors.onSurfaceVariant
                     )
                 }
             }
@@ -64,60 +63,72 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                     onClick = { viewModel.refreshStatus() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                    ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "💻 ${state.laptopName}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CatppuccinText
+                                text = state.laptopName,
+                                style = MaterialTheme.typography.title3,
+                                color = MaterialTheme.colors.onSurface
                             )
 
-                            val zoneColor = when (state.zone) {
-                                "DESK" -> CatppuccinGreen
-                                "NORMAL" -> CatppuccinBlue
-                                "WARNING" -> CatppuccinYellow
-                                "AWAY" -> CatppuccinRed
-                                else -> CatppuccinSubtext
+                            if (state.connected) {
+                                val zoneColor = if (state.zone == "DESK") {
+                                    MaterialTheme.colors.secondary
+                                } else {
+                                    MaterialTheme.colors.primary
+                                }
+                                Text(
+                                    text = state.zone,
+                                    style = MaterialTheme.typography.caption2,
+                                    fontWeight = FontWeight.Bold,
+                                    color = zoneColor
+                                )
+                            } else {
+                                Text(
+                                    text = "Offline",
+                                    style = MaterialTheme.typography.caption2,
+                                    color = MaterialTheme.colors.onSurfaceVariant
+                                )
                             }
-
-                            Text(
-                                text = state.zone,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = zoneColor
-                            )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
-                        val batText = if (state.laptopBattery != null) {
-                            val icon = if (state.acOnline) "⚡" else "🔋"
-                            "$icon ${state.laptopBattery}%"
+                        val batInfo = if (state.laptopBattery != null) {
+                            val powerSource = if (state.acOnline) "Charging" else "Battery"
+                            "${state.laptopBattery}% • $powerSource"
                         } else {
-                            if (state.acOnline) "⚡ AC Online" else "🔋 Battery"
+                            if (state.acOnline) "AC Connected" else "On Battery"
                         }
 
-                        val rssiText = if (state.rssi != null) "${state.rssi} dB" else state.distance
+                        val detailLine = if (state.rssi != null) {
+                            "$batInfo • ${state.rssi} dB"
+                        } else {
+                            "$batInfo • ${state.distance}"
+                        }
 
                         Text(
-                            text = "$batText • $rssiText",
-                            fontSize = 11.sp,
-                            color = CatppuccinSubtext
+                            text = detailLine,
+                            style = MaterialTheme.typography.caption2,
+                            color = MaterialTheme.colors.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            // Quick Action: Lock Laptop Now
             item {
                 Spacer(modifier = Modifier.height(2.dp))
             }
 
+            // Primary Action: Lock Laptop
             item {
                 Chip(
                     onClick = {
@@ -125,18 +136,25 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                         viewModel.lockLaptop()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Lock Screen Now", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                    secondaryLabel = {
+                    label = {
                         Text(
-                            if (state.isLocked) "Laptop is locked" else "Immediately lock Freetop",
-                            fontSize = 10.sp
+                            text = "Lock laptop",
+                            style = MaterialTheme.typography.button
                         )
                     },
-                    icon = { Text("🔒", fontSize = 16.sp) },
-                    colors = ChipDefaults.chipColors(
-                        backgroundColor = Color(0xFF3B1E2B),
-                        contentColor = CatppuccinRed
-                    )
+                    secondaryLabel = {
+                        Text(
+                            text = if (state.isLocked) "Screen is locked" else "Lock immediately",
+                            style = MaterialTheme.typography.caption2
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_lock),
+                            contentDescription = "Lock",
+                            modifier = Modifier.size(ChipDefaults.IconSize)
+                        )
+                    }
                 )
             }
 
@@ -149,27 +167,34 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                         viewModel.toggleGuard()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Proximity Guard", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
-                    secondaryLabel = {
+                    label = {
                         Text(
-                            if (state.guardEnabled) "Active in GNOME" else "Paused in GNOME",
-                            fontSize = 10.sp
+                            text = "Proximity guard",
+                            style = MaterialTheme.typography.button
                         )
                     },
-                    appIcon = { Text("🛡️", fontSize = 15.sp) },
+                    secondaryLabel = {
+                        Text(
+                            text = if (state.guardEnabled) "Active" else "Paused",
+                            style = MaterialTheme.typography.caption2
+                        )
+                    },
+                    appIcon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_security),
+                            contentDescription = "Security Guard",
+                            modifier = Modifier.size(ChipDefaults.IconSize)
+                        )
+                    },
                     toggleControl = {
                         Switch(
-                            checked = state.guardEnabled,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = CatppuccinGreen,
-                                checkedTrackColor = Color(0xFF233B28)
-                            )
+                            checked = state.guardEnabled
                         )
                     }
                 )
             }
 
-            // Action: Ring My Laptop (Audible Chime)
+            // Action: Ring Laptop (Locate)
             item {
                 Chip(
                     onClick = {
@@ -177,17 +202,29 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                         viewModel.ringLaptop()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Ring Laptop", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
-                    secondaryLabel = { Text("Play chime to find laptop", fontSize = 10.sp) },
-                    icon = { Text("🔔", fontSize = 15.sp) },
-                    colors = ChipDefaults.chipColors(
-                        backgroundColor = CatppuccinMantle,
-                        contentColor = CatppuccinYellow
-                    )
+                    label = {
+                        Text(
+                            text = "Ring laptop",
+                            style = MaterialTheme.typography.button
+                        )
+                    },
+                    secondaryLabel = {
+                        Text(
+                            text = "Play sound to find",
+                            style = MaterialTheme.typography.caption2
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_ring),
+                            contentDescription = "Ring",
+                            modifier = Modifier.size(ChipDefaults.IconSize)
+                        )
+                    }
                 )
             }
 
-            // Action: Snooze Guard (15m)
+            // Action: Snooze Guard
             item {
                 Chip(
                     onClick = {
@@ -195,18 +232,25 @@ fun WatchProximityScreen(viewModel: WatchProximityViewModel = remember { WatchPr
                         viewModel.snoozeGuard(900)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Snooze Guard (15m)", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) },
-                    secondaryLabel = {
+                    label = {
                         Text(
-                            if (state.snoozeRemaining > 0) "${state.snoozeRemaining / 60}m remaining" else "Pause away lock for 15m",
-                            fontSize = 10.sp
+                            text = "Snooze",
+                            style = MaterialTheme.typography.button
                         )
                     },
-                    icon = { Text("☕", fontSize = 15.sp) },
-                    colors = ChipDefaults.chipColors(
-                        backgroundColor = CatppuccinMantle,
-                        contentColor = CatppuccinPeach
-                    )
+                    secondaryLabel = {
+                        Text(
+                            text = if (state.snoozeRemaining > 0) "${state.snoozeRemaining / 60}m remaining" else "Pause for 15 min",
+                            style = MaterialTheme.typography.caption2
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_snooze),
+                            contentDescription = "Snooze",
+                            modifier = Modifier.size(ChipDefaults.IconSize)
+                        )
+                    }
                 )
             }
         }
