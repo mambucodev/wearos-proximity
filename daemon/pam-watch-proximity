@@ -62,10 +62,10 @@ def main():
     except Exception:
         sys.exit(1)
 
-    # 1. Freshness check: daemon must be actively polling (within 4s)
+    # 1. Freshness check: daemon must be actively polling (within 10s)
     now = time.time()
     updated_at = data.get("updated_at", 0)
-    if (now - updated_at) > 4.0 or (updated_at > now + 2.0):
+    if (now - updated_at) > 10.0 or (updated_at > now + 3.0):
         sys.exit(1)
 
     # 2. Zone check: user must be at Desk (> +1 dB)
