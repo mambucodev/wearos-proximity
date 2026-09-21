@@ -54,35 +54,43 @@ def main():
     uid = get_target_uid()
     status_file = Path(f"/run/user/{uid}/bt-proximity-status.json")
 
-    if not status_file.exists():
+    def fail(reason: str, d=None):
+        try:
+            with open("/tmp/pam-debug.log", "a") as f:
+                f.write(f"[{time.strftime('%X')}] FAIL: {reason} | uid={uid} | data={d}\n")
+        except Exception:
+            pass
         sys.exit(1)
+
+    if not status_file.exists():
+        fail(f"Status file {status_file} does not exist")
 
     try:
         data = json.loads(status_file.read_text(encoding="utf-8"))
-    except Exception:
-        sys.exit(1)
+    except Exception as e:
+        fail(f"Failed to parse JSON: {e}")
 
     # 1. Freshness check: daemon must be actively polling (within 10s)
     now = time.time()
     updated_at = data.get("updated_at", 0)
     if (now - updated_at) > 10.0 or (updated_at > now + 3.0):
-        sys.exit(1)
+        fail(f"Stale telemetry: now={now} updated_at={updated_at} diff={now - updated_at}", data)
 
     # 2. Zone check: user must be at Desk (> +1 dB)
     if data.get("state") != "DESK":
-        sys.exit(1)
+        fail(f"Not in DESK zone: state={data.get('state')}", data)
 
     # 3. Connection check
     if not data.get("connected"):
-        sys.exit(1)
+        fail("Device not connected", data)
 
     # 4. Laptop lock check: cannot authenticate while screen is locked
     if data.get("is_locked"):
-        sys.exit(1)
+        fail("Screen is locked", data)
 
     # 5. Alarm check: cannot authenticate if anti-theft siren is active
     if data.get("alarm_active"):
-        sys.exit(1)
+        fail("Anti-theft alarm active", data)
 
     # 6. Watch Security Telemetry:
     # Must be confirmed unlocked (PIN entered) AND confirmed on-body (on wrist)
@@ -91,16 +99,19 @@ def main():
 
     # If telemetry is reporting, enforce strictly:
     if watch_unlocked is False:
-        # Watch is explicitly locked -> REJECT
-        sys.exit(1)
+        fail("Watch is locked", data)
 
     if watch_on_body is False:
-        # Watch is off-wrist -> REJECT
-        sys.exit(1)
+        fail("Watch is off-body", data)
 
-    # If telemetry is null / not reporting yet, fallback to fingerprint/password for safety
     if watch_unlocked is None or watch_on_body is None:
-        sys.exit(1)
+        fail("Telemetry is None", data)
+
+    try:
+        with open("/tmp/pam-debug.log", "a") as f:
+            f.write(f"[{time.strftime('%X')}] SUCCESS: auto-unlock authorized for uid={uid}\n")
+    except Exception:
+        pass
 
     # All criteria satisfied!
     sys.exit(0)
