@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""
+pam-watch-proximity
+PAM authentication helper for watch-proximity.
+Grants instant passwordless authentication if and only if:
+1. Proximity daemon is running and state is DESK (> +1 dB).
+2. Telemetry is fresh (updated within 4 seconds).
+3. The smartwatch is physically ON-WRIST.
+4. The smartwatch is UNLOCKED (PIN entered).
+
+Exits 0 on success, 1 on failure/rejection (falling back to fprintd / password).
+"""
+
+import os
+import sys
+import time
+import json
+import pwd
+from pathlib import Path
+
+
+def get_target_uid() -> int:
+    """Determine UID of the user requesting authentication."""
+    # PAM sets PAM_USER
+    pam_user = os.environ.get("PAM_USER")
+    if pam_user:
+        try:
+            return pwd.getpwnam(pam_user).pw_uid
+        except KeyError:
+            pass
+
+    # SUDO_USER when running under sudo
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        try:
+            return pwd.getpwnam(sudo_user).pw_uid
+        except KeyError:
+            pass
+
+    # Standard fallback
+    return os.getuid() if os.getuid() != 0 else 1000
+
+
+def main():
+    uid = get_target_uid()
+    status_file = Path(f"/run/user/{uid}/bt-proximity-status.json")
+
+    if not status_file.exists():
+        sys.exit(1)
+
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+    except Exception:
+        sys.exit(1)
+
+    # 1. Freshness check: daemon must be actively polling (within 4s)
+    now = time.time()
+    updated_at = data.get("updated_at", 0)
+    if (now - updated_at) > 4.0 or (updated_at > now + 2.0):
+        sys.exit(1)
+
+    # 2. Zone check: user must be at Desk (> +1 dB)
+    if data.get("state") != "DESK":
+        sys.exit(1)
+
+    # 3. Connection check
+    if not data.get("connected"):
+        sys.exit(1)
+
+    # 4. Laptop lock check: cannot authenticate while screen is locked
+    if data.get("is_locked"):
+        sys.exit(1)
+
+    # 5. Alarm check: cannot authenticate if anti-theft siren is active
+    if data.get("alarm_active"):
+        sys.exit(1)
+
+    # 6. Watch Security Telemetry:
+    # Must be confirmed unlocked (PIN entered) AND confirmed on-body (on wrist)
+    watch_unlocked = data.get("watch_unlocked")
+    watch_on_body = data.get("watch_on_body")
+
+    # If telemetry is reporting, enforce strictly:
+    if watch_unlocked is False:
+        # Watch is explicitly locked -> REJECT
+        sys.exit(1)
+
+    if watch_on_body is False:
+        # Watch is off-wrist -> REJECT
+        sys.exit(1)
+
+    # If telemetry is null / not reporting yet, fallback to fingerprint/password for safety
+    if watch_unlocked is None or watch_on_body is None:
+        sys.exit(1)
+
+    # All criteria satisfied!
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

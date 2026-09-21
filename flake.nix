@@ -75,5 +75,7 @@
       }) // {
         homeManagerModules.default = import ./nix/home-manager.nix;
         homeManagerModules.watch-proximity = import ./nix/home-manager.nix;
+        nixosModules.default = import ./nix/nixos-module.nix;
+        nixosModules.watch-proximity = import ./nix/nixos-module.nix;
       };
 }
