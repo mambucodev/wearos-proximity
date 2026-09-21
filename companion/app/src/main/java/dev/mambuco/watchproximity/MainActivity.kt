@@ -1,49 +1,29 @@
 package dev.mambuco.watchproximity
 
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import dev.mambuco.watchproximity.presentation.WatchProximityScreen
+import dev.mambuco.watchproximity.presentation.theme.WatchProximityTheme
 
-class MainActivity : Activity() {
-
-    private lateinit var statusText: TextView
-    private lateinit var toggleButton: Button
+class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        statusText = findViewById(R.id.text_status)
-        toggleButton = findViewById(R.id.btn_toggle_service)
-        val testNotifButton = findViewById<Button>(R.id.btn_test_notif)
 
         checkPermissions()
-
-        toggleButton.setOnClickListener {
-            startProximityService()
-            updateUi()
-        }
-
-        testNotifButton.setOnClickListener {
-            val intent = Intent(this, ProximityBleService::class.java).apply {
-                putExtra("command", "TEST")
-            }
-            startService(intent)
-        }
-
         startProximityService()
-        updateUi()
-    }
 
-    override fun onResume() {
-        super.onResume()
-        updateUi()
+        setContent {
+            WatchProximityTheme {
+                WatchProximityScreen()
+            }
+        }
     }
 
     private fun startProximityService() {
@@ -53,10 +33,6 @@ class MainActivity : Activity() {
         } else {
             startService(serviceIntent)
         }
-    }
-
-    private fun updateUi() {
-        statusText.text = "Service: Active\nBLE Ready"
     }
 
     private fun checkPermissions() {

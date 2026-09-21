@@ -28,6 +28,8 @@ import logging
 import argparse
 import subprocess
 import threading
+import http.server
+from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
 # Paths
@@ -533,6 +535,126 @@ class AntiTheftAlarm:
             self._siren_proc = None
 
 
+def get_laptop_battery() -> int | None:
+    """Read laptop internal battery capacity percentage."""
+    try:
+        bat0 = Path("/sys/class/power_supply/BAT0/capacity")
+        if bat0.exists():
+            return int(bat0.read_text().strip())
+        bat1 = Path("/sys/class/power_supply/BAT1/capacity")
+        if bat1.exists():
+            return int(bat1.read_text().strip())
+    except Exception:
+        pass
+    return None
+
+
+class ProximityApiHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        logger.debug("HTTP API: " + fmt % args)
+
+    def send_json(self, status_code: int, data: dict):
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path == "/api/status":
+            st = {}
+            if STATUS_FILE.exists():
+                try:
+                    st = json.loads(STATUS_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            ctrl = read_runtime_controls({})
+            paused = ctrl.get("PAUSED", False)
+            res = {
+                "laptop": "Freetop",
+                "state": st.get("state", "UNKNOWN"),
+                "rssi": st.get("rssi"),
+                "distance": st.get("distance_est", "--"),
+                "proximity_enabled": not paused,
+                "is_locked": is_screen_locked(),
+                "battery": st.get("battery"),
+                "laptop_battery": get_laptop_battery(),
+                "ac_online": is_ac_online(),
+                "snooze_remaining": check_snooze(),
+            }
+            self.send_json(200, res)
+        else:
+            self.send_json(404, {"error": "Not found"})
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        if url.path == "/api/lock":
+            logger.info("HTTP API: Lock screen requested from watch!")
+            lock_screen()
+            send_watch_event("LOCK")
+            self.send_json(200, {"success": True, "message": "Screen locked"})
+        elif url.path == "/api/toggle-guard":
+            ctrl = {}
+            if CONTROL_FILE.exists():
+                try:
+                    ctrl = json.loads(CONTROL_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            new_paused = not ctrl.get("paused", False)
+            ctrl["paused"] = new_paused
+            CONTROL_FILE.write_text(json.dumps(ctrl), encoding="utf-8")
+            status_msg = "Paused" if new_paused else "Active"
+            logger.info("HTTP API: Proximity Guard toggled from watch -> %s", status_msg)
+            send_notification("Proximity Guard", f"Proximity lock is now {status_msg}")
+            self.send_json(200, {"success": True, "proximity_enabled": not new_paused})
+        elif url.path == "/api/ring":
+            logger.info("HTTP API: Ring My Laptop requested from watch!")
+            try:
+                subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], capture_output=True, timeout=1)
+                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "1.0"], capture_output=True, timeout=1)
+                sound = "/run/current-system/sw/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"
+                subprocess.Popen(["pw-play", sound])
+            except Exception as e:
+                logger.error("Failed to play ring chime: %s", e)
+            send_notification("Find My Laptop", "Watch triggered audible chime!")
+            self.send_json(200, {"success": True, "message": "Chime ringing"})
+        elif url.path == "/api/snooze":
+            qs = parse_qs(url.query)
+            duration = int(qs.get("duration", [900])[0])
+            SNOOZE_FILE.write_text(str(time.time() + duration), encoding="utf-8")
+            logger.info("HTTP API: Proximity Guard snoozed for %d seconds", duration)
+            send_notification("Proximity Guard Snoozed", f"Guard snoozed for {duration // 60} minutes")
+            self.send_json(200, {"success": True, "snooze_remaining": duration})
+        else:
+            self.send_json(404, {"error": "Not found"})
+
+
+def start_api_server(port: int = 8999):
+    """Start daemon HTTP API server on background thread."""
+    class ThreadingHTTPServer(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", port), ProximityApiHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info("HTTP API server listening on http://0.0.0.0:%d", port)
+    except Exception as e:
+        logger.warning("Could not start HTTP API server on port %d: %s", port, e)
+
+
 def write_status(data: dict):
     """Write current state to tmpfs JSON file atomically for GNOME extension & PAM."""
     try:
@@ -598,6 +720,8 @@ def run_daemon(config: dict):
     paused_players: list[str] = []
     anti_theft = AntiTheftAlarm(config["ALARM_SOUND_PATH"])
     prev_locked = is_screen_locked()
+
+    start_api_server(8999)
 
     while True:
         config = read_runtime_controls(config)
