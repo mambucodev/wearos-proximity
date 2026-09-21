@@ -1,0 +1,18 @@
+# Build results
+result
+result-*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Nix
+.direnv/
+
+# Runtime / temporary files
+*.tmp
+*.log
+.DS_Store
