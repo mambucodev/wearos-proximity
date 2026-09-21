@@ -1,0 +1,7 @@
+{
+  "uuid": "watch-proximity@mambuco",
+  "name": "Watch Proximity Guard",
+  "description": "Quick Settings toggle & monitor with multi-zone RSSI meter, watch on-body/unlock telemetry, auto-wake, and anti-theft controls",
+  "shell-version": [ "45", "46", "47", "48", "49", "50" ],
+  "version": 1
+}
