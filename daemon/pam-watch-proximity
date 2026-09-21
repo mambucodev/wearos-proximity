@@ -20,25 +20,34 @@ from pathlib import Path
 
 
 def get_target_uid() -> int:
-    """Determine UID of the user requesting authentication."""
-    # PAM sets PAM_USER
-    pam_user = os.environ.get("PAM_USER")
-    if pam_user:
+    """Determine UID of the calling user requesting authentication."""
+    # 1. PAM_RUSER is set by pam_exec to the requesting user (e.g. 'mambuco')
+    # 2. SUDO_USER is set when running under sudo
+    for var in ("PAM_RUSER", "SUDO_USER"):
+        user = os.environ.get(var)
+        if user and user != "root":
+            try:
+                return pwd.getpwnam(user).pw_uid
+            except KeyError:
+                pass
+
+    # 3. If PAM_USER is set and NOT root, use it (e.g. graphical login / screen unlock)
+    user = os.environ.get("PAM_USER")
+    if user and user != "root":
         try:
-            return pwd.getpwnam(pam_user).pw_uid
+            return pwd.getpwnam(user).pw_uid
         except KeyError:
             pass
 
-    # SUDO_USER when running under sudo
-    sudo_user = os.environ.get("SUDO_USER")
-    if sudo_user:
-        try:
-            return pwd.getpwnam(sudo_user).pw_uid
-        except KeyError:
-            pass
+    # 4. If called by root without env, check active logged-in graphical user in /run/user
+    try:
+        users = [int(p.name) for p in Path("/run/user").iterdir() if p.name.isdigit() and int(p.name) >= 1000]
+        if users:
+            return users[0]
+    except Exception:
+        pass
 
-    # Standard fallback
-    return os.getuid() if os.getuid() != 0 else 1000
+    return 1000
 
 
 def main():
