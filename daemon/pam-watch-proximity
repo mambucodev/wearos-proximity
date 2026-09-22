@@ -76,9 +76,10 @@ def main():
     if (now - updated_at) > 10.0 or (updated_at > now + 3.0):
         fail(f"Stale telemetry: now={now} updated_at={updated_at} diff={now - updated_at}", data)
 
-    # 2. Zone check: user must be at Desk (> +1 dB)
-    if data.get("state") != "DESK":
-        fail(f"Not in DESK zone: state={data.get('state')}", data)
+    # 2. Zone check: user must be at laptop (DESK or NORMAL zone, not WARNING or AWAY)
+    state = data.get("state")
+    if state not in ("DESK", "NORMAL"):
+        fail(f"Not in DESK/NORMAL zone: state={state}", data)
 
     # 3. Connection check
     if not data.get("connected"):
