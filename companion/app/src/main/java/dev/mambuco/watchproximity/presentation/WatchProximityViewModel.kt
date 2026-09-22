@@ -30,7 +30,7 @@ class WatchProximityViewModel {
 
     companion object {
         private const val TAG = "WatchProximityVM"
-        private val HOST_CANDIDATES = listOf("127.0.0.1", "192.168.1.6")
+        private val HOST_CANDIDATES = listOf("127.0.0.1", "Freetop.local", "10.31.192.50", "192.168.1.6")
         private const val PORT = 8999
     }
 
