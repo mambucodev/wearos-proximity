@@ -199,7 +199,6 @@ class ProximityToggle extends QuickSettings.QuickMenuToggle {
         if (this._indicatorRef)
             this._indicatorRef.visible = true;
 
-        const status = this._readStatus();
         if (!status) {
             this.subtitle = 'Active';
             this.iconName = 'system-lock-screen-symbolic';
