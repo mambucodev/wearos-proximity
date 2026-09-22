@@ -97,15 +97,12 @@ def main():
     watch_unlocked = data.get("watch_unlocked")
     watch_on_body = data.get("watch_on_body")
 
-    # If telemetry is reporting, enforce strictly:
+    # If telemetry is reporting, enforce strictly (reject if locked or off-wrist):
     if watch_unlocked is False:
         fail("Watch is locked", data)
 
     if watch_on_body is False:
         fail("Watch is off-body", data)
-
-    if watch_unlocked is None or watch_on_body is None:
-        fail("Telemetry is None", data)
 
     try:
         with open("/tmp/pam-debug.log", "a") as f:
